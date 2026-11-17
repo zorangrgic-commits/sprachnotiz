@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1e1b2e">
+<title>Sprachnotiz</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root { --bg:#1e1b2e; --card:#2a2640; --accent:#7c5cff; --rec:#ff4d6d; --text:#f2f0fa; --muted:#a39fbd; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; -webkit-tap-highlight-color:transparent; }
+  body { display:flex; flex-direction:column; align-items:center; padding:env(safe-area-inset-top) 16px 16px; }
+  header { width:100%; display:flex; justify-content:space-between; align-items:center; padding:14px 4px; }
+  header h1 { font-size:18px; font-weight:600; margin:0; }
+  .iconbtn { background:none; border:0; color:var(--muted); font-size:24px; padding:6px; }
+  main { flex:1; width:100%; max-width:520px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; }
+  #mic { width:200px; height:200px; border-radius:50%; border:0; background:var(--accent); color:#fff;
+    box-shadow:0 10px 40px rgba(124,92,255,.45); display:flex; align-items:center; justify-content:center;
+    transition:transform .15s, background .2s; touch-action:manipulation; }
+  #mic:active { transform:scale(.96); }
+  #mic svg { width:84px; height:84px; }
+  #mic.rec { background:var(--rec); box-shadow:0 0 0 0 rgba(255,77,109,.6); animation:pulse 1.4s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(255,77,109,.55);} 70%{box-shadow:0 0 0 34px rgba(255,77,109,0);} 100%{box-shadow:0 0 0 0 rgba(255,77,109,0);} }
+  #status { color:var(--muted); font-size:16px; min-height:22px; text-align:center; }
+  #text { width:100%; min-height:120px; background:var(--card); color:var(--text); border:1px solid #3a3556;
+    border-radius:14px; padding:14px; font-size:17px; line-height:1.45; resize:vertical; font-family:inherit; }
+  .row { display:flex; gap:10px; width:100%; }
+  .btn { flex:1; padding:14px; border-radius:12px; border:0; font-size:16px; font-weight:600; background:var(--card); color:var(--text); }
+  .btn.primary { background:var(--accent); color:#fff; }
+  .hidden { display:none !important; }
+  dialog { background:var(--card); color:var(--text); border:0; border-radius:16px; width:min(92vw,460px); padding:20px; }
+  dialog::backdrop { background:rgba(0,0,0,.6); }
+  dialog h2 { margin:0 0 12px; font-size:19px; }
+  label { display:block; font-size:14px; color:var(--muted); margin:14px 0 6px; }
+  input, select { width:100%; padding:12px; border-radius:10px; border:1px solid #3a3556; background:var(--bg); color:var(--text); font-size:16px; }
+  .check { display:flex; align-items:center; gap:10px; margin-top:16px; color:var(--text); font-size:15px; }
+  .check input { width:auto; transform:scale(1.3); }
+  .hint { font-size:13px; color:var(--muted); margin-top:6px; line-height:1.4; }
+  #history { width:100%; font-size:14px; color:var(--muted); }
+  #history details { background:var(--card); border-radius:12px; padding:10px 14px; }
+  #history li { margin:6px 0; }
+  #history button { background:none; border:0; color:var(--accent); font-size:14px; padding:0 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎙️ Sprachnotiz</h1>
+  <button class="iconbtn" id="openSettings" aria-label="Einstellungen">⚙️</button>
+</header>
+
+<main>
+  <button id="mic" aria-label="Aufnahme starten">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor"/>
+      <path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/>
+    </svg>
+  </button>
+  <div id="status">Tippen zum Sprechen</div>
+  <textarea id="text" class="hidden" placeholder="Erkannter Text …"></textarea>
+  <div class="row hidden" id="actions">
+    <button class="btn" id="discard">Verwerfen</button>
+    <button class="btn primary" id="save">In Obsidian speichern</button>
+  </div>
+  <div id="history"></div>
+</main>
+
+<dialog id="settings">
+  <h2>Einstellungen</h2>
+  <label for="vault">Name des Obsidian-Vaults (genau wie in Obsidian)</label>
+  <input id="vault" placeholder="z. B. Zoran" autocomplete="off">
+  <label for="mode">Speichern als</label>
+  <select id="mode">
+    <option value="file">Eine neue Datei pro Notiz</option>
+    <option value="append">An eine Sammeldatei anhängen</option>
+  </select>
+  <label for="folder" id="folderLabel">Ordner im Vault</label>
+  <input id="folder" placeholder="Sprachnotizen" autocomplete="off">
+  <div class="hint" id="folderHint">Leer lassen = Hauptordner des Vaults.</div>
+  <label for="lang">Sprache</label>
+  <select id="lang">
+    <option value="de-DE">Deutsch</option>
+    <option value="en-US">Englisch</option>
+    <option value="hr-HR">Kroatisch</option>
+    <option value="sr-RS">Serbisch</option>
+  </select>
+  <div class="check"><input type="checkbox" id="auto"><span>Nach dem Stoppen sofort speichern (ohne Kontrolle)</span></div>
+  <div class="row" style="margin-top:20px">
+    <button class="btn primary" id="closeSettings">Fertig</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const KEY = 'sprachnotiz.settings', HKEY = 'sprachnotiz.history';
+  const store = {
+    get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+  };
+  let cfg = Object.assign({ vault:'', mode:'file', folder:'Sprachnotizen', lang:'de-DE', auto:true }, store.get(KEY, {}));
+
+  // ---------- Einstellungen ----------
+  const dlg = $('settings');
+  function fillSettings() {
+    $('vault').value = cfg.vault; $('mode').value = cfg.mode; $('folder').value = cfg.folder;
+    $('lang').value = cfg.lang; $('auto').checked = cfg.auto; updateFolderLabel();
+  }
+  function updateFolderLabel() {
+    const a = $('mode').value === 'append';
+    $('folderLabel').textContent = a ? 'Sammeldatei (Pfad im Vault)' : 'Ordner im Vault';
+    $('folder').placeholder = a ? 'Inbox/Sprachnotizen' : 'Sprachnotizen';
+    $('folderHint').textContent = a ? 'Ohne .md – z. B. Inbox/Sprachnotizen' : 'Leer lassen = Hauptordner des Vaults.';
+  }
+  $('mode').addEventListener('change', updateFolderLabel);
+  $('openSettings').onclick = () => { fillSettings(); dlg.showModal(); };
+  $('closeSettings').onclick = () => {
+    cfg = { vault:$('vault').value.trim(), mode:$('mode').value, folder:$('folder').value.trim().replace(/^\/+|\/+$/g,'').replace(/\.md$/i,''),
+            lang:$('lang').value, auto:$('auto').checked };
+    store.set(KEY, cfg); dlg.close(); setStatus(cfg.vault ? 'Tippen zum Sprechen' : 'Bitte zuerst den Vault-Namen eintragen ⚙️');
+  };
+
+  // ---------- Spracherkennung ----------
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const mic = $('mic'), ta = $('text');
+  let rec = null, recording = false, finalText = '', interim = '';
+
+  function setStatus(t) { $('status').textContent = t; }
+  function render() { ta.value = (finalText + (interim ? ' ' + interim : '')).trim(); }
+
+  function startSession() {
+    rec = new SR();
+    rec.lang = cfg.lang;
+    rec.interimResults = true;
+    rec.continuous = false;          // auf Android stabiler; wird bei Pausen automatisch neu gestartet
+    rec.maxAlternatives = 1;
+    rec.onresult = e => {
+      interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) finalText = (finalText + ' ' + r[0].transcript.trim()).trim();
+        else interim += r[0].transcript;
+      }
+      render();
+    };
+    rec.onerror = e => {
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        recording = false; setUI(); setStatus('Mikrofon nicht erlaubt – bitte in Chrome freigeben.');
+      } else if (e.error === 'network') {
+        setStatus('Keine Verbindung zur Spracherkennung.');
+      } else setStatus('Fehler: ' + e.error);
+    };
+    rec.onend = () => {
+      if (interim) { finalText = (finalText + ' ' + interim.trim()).trim(); interim = ''; render(); }
+      if (recording) { try { startSession(); } catch { finish(); } }
+      else finish();
+    };
+    rec.start();
+  }
+
+  function setUI() {
+    mic.classList.toggle('rec', recording);
+    mic.setAttribute('aria-label', recording ? 'Aufnahme stoppen' : 'Aufnahme starten');
+  }
+
+  mic.onclick = () => {
+    if (!SR) { setStatus('Dieser Browser kann keine Spracherkennung. Bitte Chrome nutzen.'); return; }
+    if (!cfg.vault) { fillSettings(); dlg.showModal(); return; }
+    if (!recording) {
+      finalText = ''; interim = ''; render();
+      ta.classList.remove('hidden'); $('actions').classList.add('hidden');
+      recording = true; setUI(); setStatus('Ich höre zu … zum Beenden tippen');
+      if (navigator.vibrate) navigator.vibrate(30);
+      try { startSession(); } catch (err) { recording = false; setUI(); setStatus('Start fehlgeschlagen: ' + err.message); }
+    } else {
+      recording = false; setUI(); setStatus('Wird verarbeitet …');
+      if (navigator.vibrate) navigator.vibrate([20,40,20]);
+      try { rec.stop(); } catch { finish(); }
+    }
+  };
+
+  function finish() {
+    render();
+    const t = ta.value.trim();
+    if (!t) { setStatus('Nichts erkannt – nochmal versuchen.'); ta.classList.add('hidden'); return; }
+    if (cfg.auto) save();
+    else { $('actions').classList.remove('hidden'); setStatus('Text prüfen und speichern'); }
+  }
+
+  // ---------- Speichern in Obsidian ----------
+  const pad = n => String(n).padStart(2, '0');
+  function stamp(d) {
+    return { date:`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`, time:`${pad(d.getHours())}:${pad(d.getMinutes())}`, sec: pad(d.getSeconds()) };
+  }
+
+  function buildUri(text, d) {
+    const s = stamp(d);
+    let file, content, extra = '';
+    if (cfg.mode === 'append') {
+      file = cfg.folder || 'Sprachnotizen';
+      content = `\n## ${s.date} ${s.time}\n${text}\n`;
+      extra = '&append=true';
+    } else {
+      const name = `${s.date} ${s.time.replace(':','-')}-${s.sec} Sprachnotiz`;
+      file = (cfg.folder ? cfg.folder + '/' : '') + name;
+      content = `---\nerstellt: ${s.date} ${s.time}\ntags: [sprachnotiz]\n---\n\n${text}\n`;
+    }
+    return `obsidian://new?vault=${encodeURIComponent(cfg.vault)}&file=${encodeURIComponent(file)}&content=${encodeURIComponent(content)}${extra}`;
+  }
+
+  function save() {
+    const text = ta.value.trim(); if (!text) return;
+    const d = new Date();
+    const uri = buildUri(text, d);
+    const h = store.get(HKEY, []); h.unshift({ t: d.toISOString(), text }); store.set(HKEY, h.slice(0, 20));
+    renderHistory();
+    setStatus('An Obsidian übergeben ✓');
+    $('actions').classList.add('hidden');
+    window.location.href = uri;
+    setTimeout(() => { ta.classList.add('hidden'); ta.value = ''; setStatus('Tippen zum Sprechen'); }, 1500);
+  }
+  $('save').onclick = save;
+  $('discard').onclick = () => { ta.value = ''; ta.classList.add('hidden'); $('actions').classList.add('hidden'); setStatus('Tippen zum Sprechen'); };
+
+  // ---------- Verlauf (Sicherheitsnetz, nur auf dem Handy) ----------
+  function renderHistory() {
+    const h = store.get(HKEY, []);
+    if (!h.length) { $('history').innerHTML = ''; return; }
+    const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    $('history').innerHTML = `<details><summary>Letzte Notizen (${h.length})</summary><ul>` +
+      h.map((n, i) => { const s = stamp(new Date(n.t));
+        return `<li><b>${s.date} ${s.time}</b> – ${esc(n.text.slice(0, 80))}${n.text.length > 80 ? '…' : ''} <button data-i="${i}">erneut senden</button></li>`; }).join('') +
+      '</ul></details>';
+    $('history').querySelectorAll('button[data-i]').forEach(b => b.onclick = () => {
+      const n = store.get(HKEY, [])[+b.dataset.i]; if (n) window.location.href = buildUri(n.text, new Date(n.t));
+    });
+  }
+  renderHistory();
+
+  if (!SR) setStatus('Spracherkennung fehlt – bitte in Chrome öffnen.');
+  else if (!cfg.vault) setStatus('Zuerst ⚙️ antippen und Vault-Namen eintragen');
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
